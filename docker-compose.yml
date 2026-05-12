@@ -24,16 +24,22 @@ services:
     image: hermes-agent
     container_name: hermes
     restart: unless-stopped
-    network_mode: host
+    # network_mode: host works only on Linux. On macOS/Windows we publish
+    # ports explicitly and bind to 127.0.0.1 so they're not reachable on
+    # the LAN by accident.
+    ports:
+      - "127.0.0.1:8642:8642"   # OpenAI-compatible gateway API (when API_SERVER_HOST is set)
     volumes:
-      - ~/.hermes:/opt/data
+      - ./hermes-home:/opt/data
     environment:
       - HERMES_UID=${HERMES_UID:-10000}
       - HERMES_GID=${HERMES_GID:-10000}
-      # To expose the OpenAI-compatible API server beyond localhost,
-      # uncomment BOTH lines (API_SERVER_KEY is mandatory for auth):
-      # - API_SERVER_HOST=0.0.0.0
-      # - API_SERVER_KEY=${API_SERVER_KEY}
+      # OpenAI-compatible HTTP API enabled. Container binds 0.0.0.0
+      # internally; host publish rule restricts external reach to
+      # 127.0.0.1:8642. API_SERVER_KEY comes from the .env file
+      # alongside this compose file (auto-loaded).
+      - API_SERVER_HOST=0.0.0.0
+      - API_SERVER_KEY=${API_SERVER_KEY}
       # Microsoft Teams — uncomment and fill in to enable Teams gateway.
       # Register your bot at https://dev.botframework.com/ to get these values.
       # - TEAMS_CLIENT_ID=${TEAMS_CLIENT_ID}
@@ -47,13 +53,17 @@ services:
     image: hermes-agent
     container_name: hermes-dashboard
     restart: unless-stopped
-    network_mode: host
+    ports:
+      - "127.0.0.1:9119:9119"
     depends_on:
       - gateway
     volumes:
-      - ~/.hermes:/opt/data
+      - ./hermes-home:/opt/data
     environment:
       - HERMES_UID=${HERMES_UID:-10000}
       - HERMES_GID=${HERMES_GID:-10000}
-    # Localhost-only. For remote access, tunnel via `ssh -L 9119:localhost:9119`.
-    command: ["dashboard", "--host", "127.0.0.1", "--no-open"]
+    # Bind 0.0.0.0 inside the container; the `ports:` mapping above
+    # restricts external reach to 127.0.0.1 on the host, so this is not
+    # LAN-exposed. `--insecure` is required to acknowledge the 0.0.0.0
+    # bind (dashboard stores API keys; the flag is its safety opt-in).
+    command: ["dashboard", "--host", "0.0.0.0", "--no-open", "--insecure"]

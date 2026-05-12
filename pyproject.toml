@@ -124,7 +124,10 @@ all = [
   "hermes-agent[dingtalk]",
   "hermes-agent[feishu]",
   "hermes-agent[google]",
-  "hermes-agent[mistral]",
+  # hermes-agent[mistral] — disabled: upstream `mistralai` package yanked from
+  # PyPI (all versions). Re-enable once pyproject.toml is updated to depend on
+  # `mistral-common` instead.
+  # "hermes-agent[mistral]",
   "hermes-agent[bedrock]",
   "hermes-agent[web]",
 ]
