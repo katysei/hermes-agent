@@ -99,6 +99,24 @@ fi
 # sleep infinity, …) remains PID-of-interest for the container runtime.  When
 # the container stops the whole process tree is torn down, so no explicit
 # cleanup is needed.
+# Optionally start the MCP-over-HTTP bridge as a side-process.
+#
+# Toggled by HERMES_MCP_HTTP_PORT being set to a port number.  Same
+# backgrounding pattern as the dashboard below: the foreground command
+# (typically `gateway run`) remains PID-of-interest so container restarts
+# behave correctly.
+#
+#   HERMES_MCP_HTTP_PORT  port (must be set to enable; e.g. 8000)
+#   HERMES_MCP_HTTP_HOST  default 0.0.0.0
+#   HERMES_MCP_HTTP_PATH  default /mcp
+if [ -n "${HERMES_MCP_HTTP_PORT:-}" ]; then
+    echo "Starting mcp-http on ${HERMES_MCP_HTTP_HOST:-0.0.0.0}:${HERMES_MCP_HTTP_PORT}${HERMES_MCP_HTTP_PATH:-/mcp} (background)"
+    (
+        stdbuf -oL -eL "${INSTALL_DIR}/.venv/bin/python" "${INSTALL_DIR}/docker/mcp_http_server.py" 2>&1 \
+            | sed -u 's/^/[mcp-http] /'
+    ) &
+fi
+
 case "${HERMES_DASHBOARD:-}" in
     1|true|TRUE|True|yes|YES|Yes)
         dash_host="${HERMES_DASHBOARD_HOST:-0.0.0.0}"
