@@ -1,53 +1,53 @@
 #
-# docker-compose.yml for Hermes Agent
+# docker-compose.yml — pip-install Hermes Docker stack
+#
+# Uses the slim Dockerfile in this branch (pip install + sparse-clone skills).
+# Builds in ~30 seconds, image is ~500 MB.  See the Dockerfile docstring for
+# what's included vs the upstream full-build image.
 #
 # Usage:
-#   HERMES_UID=$(id -u) HERMES_GID=$(id -g) docker compose up -d
-#
-# Set HERMES_UID / HERMES_GID to the host user that owns ~/.hermes so
-# files created inside the container stay readable/writable on the host.
-# The entrypoint remaps the internal `hermes` user to these values via
-# usermod/groupmod + gosu.
+#   HERMES_UID=$(id -u) HERMES_GID=$(id -g) docker compose up --build -d
 #
 # Security notes:
-#   - The dashboard service binds to 127.0.0.1 by default. It stores API
-#     keys; exposing it on LAN without auth is unsafe. If you want remote
-#     access, use an SSH tunnel or put it behind a reverse proxy that
-#     adds authentication — do NOT pass --insecure --host 0.0.0.0.
-#   - The gateway's API server is off unless you uncomment API_SERVER_KEY
-#     and API_SERVER_HOST. See docs/user-guide/api-server.md before doing
-#     this on an internet-facing host.
+#   - Dashboard binds 0.0.0.0 inside the container; the `ports:` rule below
+#     restricts external reach to 127.0.0.1 on the host so it's not LAN-exposed.
+#     --insecure is the flag the dashboard requires to acknowledge the 0.0.0.0
+#     bind (it stores API keys; the flag is its safety opt-in).
+#   - The OpenAI-compatible HTTP API on :8642 requires API_SERVER_KEY (Bearer
+#     auth).  install-docker.sh generates a strong random key into .env.
 #
 services:
   gateway:
     build: .
-    image: hermes-agent
+    image: hermes-agent-pip
     container_name: hermes
     restart: unless-stopped
-    network_mode: host
+    # Bridge networking + 127.0.0.1 port publish.  network_mode: host is
+    # Linux-only and broken on Docker Desktop (Mac/Windows).
+    ports:
+      - "127.0.0.1:8642:8642"   # OpenAI-compatible gateway API
     volumes:
       - ~/.hermes:/opt/data
     environment:
       - HERMES_UID=${HERMES_UID:-10000}
       - HERMES_GID=${HERMES_GID:-10000}
-      # To expose the OpenAI-compatible API server beyond localhost,
-      # uncomment BOTH lines (API_SERVER_KEY is mandatory for auth):
-      # - API_SERVER_HOST=0.0.0.0
-      # - API_SERVER_KEY=${API_SERVER_KEY}
-      # Microsoft Teams — uncomment and fill in to enable Teams gateway.
-      # Register your bot at https://dev.botframework.com/ to get these values.
-      # - TEAMS_CLIENT_ID=${TEAMS_CLIENT_ID}
-      # - TEAMS_CLIENT_SECRET=${TEAMS_CLIENT_SECRET}
-      # - TEAMS_TENANT_ID=${TEAMS_TENANT_ID}
-      # - TEAMS_ALLOWED_USERS=${TEAMS_ALLOWED_USERS}
-      # - TEAMS_PORT=${TEAMS_PORT:-3978}
+      # OpenAI-compatible HTTP API on.  Container binds 0.0.0.0 internally;
+      # host publish rule clamps external reach to 127.0.0.1:8642.  Key
+      # comes from the .env file alongside this docker-compose.yml.
+      - API_SERVER_HOST=0.0.0.0
+      - API_SERVER_KEY=${API_SERVER_KEY}
+      # Uncomment to expose MCP over streamable HTTP on :8000 (then also
+      # uncomment the 8000 port mapping above).  Without this var set, the
+      # entrypoint doesn't start the MCP-HTTP side-process.
+      # - HERMES_MCP_HTTP_PORT=8000
     command: ["gateway", "run"]
 
   dashboard:
-    image: hermes-agent
+    image: hermes-agent-pip
     container_name: hermes-dashboard
     restart: unless-stopped
-    network_mode: host
+    ports:
+      - "127.0.0.1:9119:9119"
     depends_on:
       - gateway
     volumes:
@@ -55,5 +55,4 @@ services:
     environment:
       - HERMES_UID=${HERMES_UID:-10000}
       - HERMES_GID=${HERMES_GID:-10000}
-    # Localhost-only. For remote access, tunnel via `ssh -L 9119:localhost:9119`.
-    command: ["dashboard", "--host", "127.0.0.1", "--no-open"]
+    command: ["dashboard", "--host", "0.0.0.0", "--no-open", "--insecure"]
